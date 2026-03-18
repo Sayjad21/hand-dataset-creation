@@ -39,7 +39,7 @@ export function AnnotationWorkspace() {
 
   if (files.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-card">
+      <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-8 text-center bg-card">
         <div className="max-w-md w-full space-y-8">
           <div>
             <h2 className="text-2xl font-bold tracking-tight">Add Images to Annotate</h2>
@@ -81,8 +81,8 @@ export function AnnotationWorkspace() {
   const currentFile = files[currentIndex];
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-black">
-      <div className="flex items-center justify-between p-3 bg-secondary/50 border-b">
+    <div className="flex-1 flex flex-col h-full bg-black overflow-hidden">
+      <div className="flex items-center justify-between p-3 bg-secondary/50 border-b shrink-0">
         <div className="text-sm font-medium">
           Image <span className="text-primary">{currentIndex + 1}</span> of {files.length}
         </div>
@@ -97,7 +97,7 @@ export function AnnotationWorkspace() {
         </div>
       </div>
       
-      <div className="flex-1 min-h-0 relative">
+      <div className="flex-1 min-h-0 w-full relative flex flex-col">
          <CanvasEditor 
             file={currentFile} 
             onSaved={handleNext}

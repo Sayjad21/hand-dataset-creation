@@ -73,7 +73,11 @@ export function CanvasEditor({ file, onSaved }: CanvasEditorProps) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // Calculate dynamic scale to fit image if offset and scale are default
-    const fitScale = Math.min(canvas.width / image.width, canvas.height / image.height);
+    const PADDING = 40; // 20px padding on each side so it doesn't touch the very edges
+    const pW = Math.max(10, canvas.width - PADDING);
+    const pH = Math.max(10, canvas.height - PADDING);
+    const fitScale = Math.min(pW / image.width, pH / image.height);
+    
     // For simplicity, we center the image
     const drawW = image.width * fitScale;
     const drawH = image.height * fitScale;
@@ -168,26 +172,20 @@ export function CanvasEditor({ file, onSaved }: CanvasEditorProps) {
     drawCanvas();
   }, [drawCanvas]);
 
-  const getEventCoords = (e: React.MouseEvent | React.TouchEvent | MouseEvent | TouchEvent) => {
+  const getEventCoords = (e: React.PointerEvent) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    
-    let clientX, clientY;
-    if ('touches' in e) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = e.clientX;
-      clientY = e.clientY;
-    }
-
-    const x = (clientX - rect.left - offset.x) / scale;
-    const y = (clientY - rect.top - offset.y) / scale;
+    const x = (e.clientX - rect.left - offset.x) / scale;
+    const y = (e.clientY - rect.top - offset.y) / scale;
     return { x, y };
   };
 
-  const handlePointerDown = (e: React.MouseEvent | React.TouchEvent) => {
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (e.target instanceof Element && e.target.hasPointerCapture(e.pointerId)) {
+      e.target.releasePointerCapture(e.pointerId);
+    }
+    
     if (mode === 'place_fingertip') {
       const coords = getEventCoords(e);
       setFingertips([...fingertips, { id: `ft-${Date.now()}`, x: coords.x, y: coords.y }]);
@@ -209,7 +207,7 @@ export function CanvasEditor({ file, onSaved }: CanvasEditorProps) {
       if (selectedBox) {
         const box = [...hands, ...targets].find(b => b.id === selectedBox);
         if (box) {
-          const handleArea = 15 / scale; // clickable area for handles
+          const handleArea = 20 / scale; // clickable area for handles
           if (Math.abs(coords.x - box.x) <= handleArea && Math.abs(coords.y - box.y) <= handleArea) clickedHandle = 'nw';
           else if (Math.abs(coords.x - (box.x + box.w)) <= handleArea && Math.abs(coords.y - box.y) <= handleArea) clickedHandle = 'ne';
           else if (Math.abs(coords.x - box.x) <= handleArea && Math.abs(coords.y - (box.y + box.h)) <= handleArea) clickedHandle = 'sw';
@@ -238,7 +236,8 @@ export function CanvasEditor({ file, onSaved }: CanvasEditorProps) {
     }
   };
 
-  const handlePointerMove = (e: React.MouseEvent | React.TouchEvent) => {
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDrawing && !isResizing && !isDragging) return;
     const coords = getEventCoords(e);
 
     if (isDrawing) {
@@ -374,6 +373,9 @@ export function CanvasEditor({ file, onSaved }: CanvasEditorProps) {
 
       if (dbError) throw dbError;
 
+      // Provide mobile users with clear feedback before clearing
+      alert("Annotation saved successfully!");
+
       // Update global context
       refreshCount();
       onSaved();
@@ -387,65 +389,70 @@ export function CanvasEditor({ file, onSaved }: CanvasEditorProps) {
   };
 
   return (
-    <div className="flex w-full h-full">
-      {/* Left Sidebar Toolbox */}
-      <div className="w-56 bg-secondary/30 border-r flex flex-col p-4 gap-4 overflow-y-auto">
-        <h3 className="font-semibold text-sm uppercase text-muted-foreground tracking-wider">Tools</h3>
+    <div className="flex flex-col md:flex-row w-full h-full overflow-hidden">
+      {/* Toolbar Area */}
+      <div className="w-full md:w-64 bg-secondary/95 backdrop-blur-sm border-t md:border-t-0 md:border-r p-3 pb-8 md:pb-3 flex flex-col gap-3 shrink-0 overflow-y-auto max-h-[45vh] md:max-h-full order-2 md:order-1 z-10">
+        <h3 className="hidden md:block font-semibold text-sm uppercase text-muted-foreground tracking-wider shrink-0">Tools</h3>
         
-        <div className="flex flex-col gap-2">
+        {/* Tools grid */}
+        <div className="grid grid-cols-4 md:grid-cols-1 gap-2 shrink-0">
           <ToolButton 
             active={mode === 'select'} 
             onClick={() => setMode('select')}
             icon={<MousePointer2 className="w-4 h-4" />}
-            label="Select / Move"
+            label="Select"
           />
           <ToolButton 
             active={mode === 'draw_hand'} 
             onClick={() => setMode('draw_hand')}
             icon={<Hand className="w-4 h-4" />}
-            label="Hand Box"
+            label="Hand"
             color={COLORS.hand}
           />
           <ToolButton 
             active={mode === 'draw_target'} 
             onClick={() => setMode('draw_target')}
             icon={<PlusSquare className="w-4 h-4" />}
-            label="Target Box"
+            label="Target"
             color={COLORS.target}
           />
           <ToolButton 
             active={mode === 'place_fingertip'} 
             onClick={() => setMode('place_fingertip')}
             icon={<Crosshair className="w-4 h-4" />}
-            label="Fingertip"
+            label="Tip"
             color={COLORS.fingertip}
           />
         </div>
 
-        <div className="h-px bg-border my-2" />
+        <div className="w-full h-px bg-border my-1 shrink-0" />
         
+        {/* Selected Box UI */}
         {selectedBox && (
-          <div className="bg-destructive/10 p-3 rounded-lg border border-destructive/20 text-center flex flex-col gap-3">
-             <p className="text-xs text-destructive font-medium">1 Box Selected</p>
+          <div className="bg-destructive/10 p-3 rounded-lg border border-destructive/20 flex flex-col gap-3 shrink-0">
+             <div className="flex justify-between items-center">
+                <p className="text-xs text-destructive font-bold uppercase tracking-wide">Selected</p>
+                <span className="text-[10px] bg-background px-2 py-0.5 rounded text-muted-foreground">ID: {selectedBox.split('-')[2]}</span>
+             </div>
              
              {/* Box Type Selection */}
              {(() => {
                const box = [...hands, ...targets].find(b => b.id === selectedBox);
                if (box && box.type === 'hand') {
                  return (
-                   <div className="text-left">
-                     <label className="text-xs font-semibold text-foreground mb-1 block">Pointing Type</label>
+                   <div className="flex flex-col gap-1.5">
+                     <label className="text-xs font-semibold text-foreground">Pointing Type:</label>
                      <select
                        value={box.pointing_type || ""}
                        onChange={(e) => {
                          const val = e.target.value;
                          setHands(hands.map(h => h.id === selectedBox ? { ...h, pointing_type: val } : h));
                        }}
-                       className="w-full text-xs p-1.5 rounded bg-background border border-border text-foreground"
+                       className="w-full text-xs p-2 rounded-md bg-background border border-border text-foreground focus:ring-2 focus:ring-primary outline-none"
                      >
-                       <option value="">None</option>
-                       <option value="pointing from distance">pointing from distance</option>
-                       <option value="pointing at empty space">pointing at empty space</option>
+                       <option value="">(None)</option>
+                       <option value="pointing from distance">Pointing from distance</option>
+                       <option value="pointing at empty space">Pointing at empty space</option>
                      </select>
                    </div>
                  );
@@ -455,7 +462,7 @@ export function CanvasEditor({ file, onSaved }: CanvasEditorProps) {
 
              <button 
                 onClick={deleteSelected}
-                className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90 text-sm py-1.5 rounded transition-colors font-medium flex items-center justify-center gap-2"
+                className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90 text-sm py-2 rounded-md transition-colors font-medium flex items-center justify-center gap-2 mt-1"
               >
                <X className="w-4 h-4" /> Delete Box
              </button>
@@ -465,18 +472,20 @@ export function CanvasEditor({ file, onSaved }: CanvasEditorProps) {
         {fingertips.length > 0 && (
           <button 
             onClick={() => setFingertips([])}
-            className="text-xs text-muted-foreground hover:text-foreground text-left px-2"
+            className="text-xs font-medium text-destructive hover:text-destructive/80 text-center px-2 py-1 bg-destructive/10 rounded-md shrink-0"
           >
             Clear Fingertips
           </button>
         )}
 
-        <div className="flex-1" />
+        {/* Spacer for desktop */}
+        <div className="flex-1 hidden md:block" />
 
+        {/* Save button pinned to bottom/end */}
         <button 
           onClick={saveToSupabase}
           disabled={isSaving}
-          className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 px-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
+          className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 px-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none shrink-0 mt-auto"
         >
           {isSaving ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5" />}
           {isSaving ? "Saving..." : "Save & Next"}
@@ -486,16 +495,14 @@ export function CanvasEditor({ file, onSaved }: CanvasEditorProps) {
       {/* Main Canvas Area */}
       <div 
         ref={containerRef} 
-        className="flex-1 relative overflow-hidden bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-black cursor-crosshair"
-        onMouseDown={handlePointerDown}
-        onMouseMove={handlePointerMove}
-        onMouseUp={handlePointerUp}
-        onMouseLeave={handlePointerUp}
-        onTouchStart={handlePointerDown}
-        onTouchMove={handlePointerMove}
-        onTouchEnd={handlePointerUp}
+        className="flex-1 relative overflow-hidden bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-black cursor-crosshair touch-none min-h-0 min-w-0 order-1 md:order-2"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        style={{ touchAction: 'none' }}
       >
-        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" style={{ touchAction: 'none' }} />
+        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" style={{ touchAction: 'none' }} />
       </div>
     </div>
   );
@@ -513,7 +520,7 @@ function ToolButton({ active, onClick, icon, label, color }: ToolButtonProps) {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all w-full text-left
+      className={`flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-3 px-2 py-2 md:px-3 md:py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all w-full text-center md:text-left
         ${active 
           ? 'bg-primary/20 text-primary border border-primary/50 shadow-inner' 
           : 'bg-background border border-border text-foreground hover:bg-accent hover:text-accent-foreground'
@@ -522,7 +529,7 @@ function ToolButton({ active, onClick, icon, label, color }: ToolButtonProps) {
       <div style={{ color: active && color ? color : 'inherit' }}>
         {icon}
       </div>
-      <span>{label}</span>
+      <span className="truncate w-full">{label}</span>
     </button>
   );
 }
