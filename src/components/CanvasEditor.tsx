@@ -18,19 +18,6 @@ const COLORS = {
   drawing: "#3b82f6", // blue
 };
 
-type RawHandBox = [number, number, number, number];
-
-interface RawObjectPrediction {
-  bbox: [number, number, number, number];
-  label?: string;
-  conf?: number;
-}
-
-interface PredictionResponse {
-  hands?: RawHandBox[];
-  objects?: RawObjectPrediction[];
-}
-
 export function CanvasEditor({ file, onSaved }: CanvasEditorProps) {
   const { userId, refreshCount } = useAppContext();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -54,63 +41,18 @@ export function CanvasEditor({ file, onSaved }: CanvasEditorProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
-  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   // Load image
   useEffect(() => {
-    setIsLoading(true);
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
       setImage(img);
-      runPrediction(file);
     };
     img.src = url;
     return () => URL.revokeObjectURL(url);
   }, [file]);
-
-  // Run initial FastAPI predict
-  const runPrediction = async (imageFile: File) => {
-    const apiUrl = process.env.NEXT_PUBLIC_HF_API_URL || "http://localhost:7860";
-    try {
-      const formData = new FormData();
-      formData.append("file", imageFile);
-      formData.append("conf_thresh", "0.20");
-
-      const res = await fetch(`${apiUrl}/predict`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (res.ok) {
-        const data: PredictionResponse = await res.json();
-        
-        const hBoxes: Box[] = (data.hands || []).map((h, i: number) => ({
-          id: `h-${Date.now()}-${i}`,
-          x: h[0], y: h[1], w: h[2], h: h[3],
-          type: "hand"
-        }));
-
-        const tBoxes: Box[] = (data.objects || []).map((o, i: number) => ({
-          id: `t-${Date.now()}-${i}`,
-          x: o.bbox[0], y: o.bbox[1], w: o.bbox[2], h: o.bbox[3],
-          type: "target",
-          label: o.label,
-          conf: o.conf
-        }));
-
-        setHands(hBoxes);
-        setTargets(tBoxes);
-      } else {
-        console.warn("Prediction endpoint returned error or not found. Relying on manual annotation.");
-      }
-    } catch (e) {
-      console.warn("FastAPI prediction failed (CORS or unavailable). Start manual annotation.", e);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // Render Canvas
   const drawCanvas = useCallback(() => {
@@ -428,7 +370,7 @@ export function CanvasEditor({ file, onSaved }: CanvasEditorProps) {
 
         <button 
           onClick={saveToSupabase}
-          disabled={isSaving || isLoading}
+          disabled={isSaving}
           className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 px-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
         >
           {isSaving ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5" />}
@@ -448,12 +390,6 @@ export function CanvasEditor({ file, onSaved }: CanvasEditorProps) {
         onTouchMove={handlePointerMove}
         onTouchEnd={handlePointerUp}
       >
-        {isLoading && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 z-10 backdrop-blur-sm">
-            <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
-            <p className="text-primary font-medium">Running YOLO & MediaPipe Predictions...</p>
-          </div>
-        )}
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" style={{ touchAction: 'none' }} />
       </div>
     </div>
