@@ -40,6 +40,8 @@ export function CanvasEditor({ file, onSaved }: CanvasEditorProps) {
 
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  
+  const [isResizing, setIsResizing] = useState<string | null>(null);
 
   const [isSaving, setIsSaving] = useState(false);
 
@@ -99,17 +101,34 @@ export function CanvasEditor({ file, onSaved }: CanvasEditorProps) {
         ctx.strokeRect(x, y, w, h);
 
         // Label
-        if (b.label) {
+        const displayLabel = b.pointing_type ? `${b.label || b.type} (${b.pointing_type})` : (b.label || b.type);
+        if (displayLabel) {
           ctx.fillStyle = color;
           ctx.font = "12px sans-serif";
-          ctx.fillRect(x, y - 20, ctx.measureText(b.label).width + 8, 20);
+          ctx.fillRect(x, y - 20, ctx.measureText(displayLabel).width + 8, 20);
           ctx.fillStyle = "#fff";
-          ctx.fillText(b.label, x + 4, y - 5);
+          ctx.fillText(displayLabel, x + 4, y - 5);
         }
 
         if (selectedBox === b.id) {
            ctx.fillStyle = "rgba(255,255,255,0.2)";
            ctx.fillRect(x,y,w,h);
+           
+           // Draw resize handles
+           const handleSize = 8;
+           ctx.fillStyle = "#ffffff";
+           ctx.strokeStyle = "#000000";
+           ctx.lineWidth = 1;
+           const handles = [
+             { hx: x, hy: y },
+             { hx: x + w, hy: y },
+             { hx: x, hy: y + h },
+             { hx: x + w, hy: y + h }
+           ];
+           handles.forEach(({ hx, hy }) => {
+             ctx.fillRect(hx - handleSize/2, hy - handleSize/2, handleSize, handleSize);
+             ctx.strokeRect(hx - handleSize/2, hy - handleSize/2, handleSize, handleSize);
+           });
         }
       });
     };
@@ -185,6 +204,24 @@ export function CanvasEditor({ file, onSaved }: CanvasEditorProps) {
 
     if (mode === "select") {
       const coords = getEventCoords(e);
+      let clickedHandle = null;
+
+      if (selectedBox) {
+        const box = [...hands, ...targets].find(b => b.id === selectedBox);
+        if (box) {
+          const handleArea = 15 / scale; // clickable area for handles
+          if (Math.abs(coords.x - box.x) <= handleArea && Math.abs(coords.y - box.y) <= handleArea) clickedHandle = 'nw';
+          else if (Math.abs(coords.x - (box.x + box.w)) <= handleArea && Math.abs(coords.y - box.y) <= handleArea) clickedHandle = 'ne';
+          else if (Math.abs(coords.x - box.x) <= handleArea && Math.abs(coords.y - (box.y + box.h)) <= handleArea) clickedHandle = 'sw';
+          else if (Math.abs(coords.x - (box.x + box.w)) <= handleArea && Math.abs(coords.y - (box.y + box.h)) <= handleArea) clickedHandle = 'se';
+        }
+      }
+
+      if (clickedHandle) {
+        setIsResizing(clickedHandle);
+        return;
+      }
+
       // Determine if a box is clicked
       const clickedBox = [...hands, ...targets].slice().reverse().find(b => 
         coords.x >= b.x && coords.x <= b.x + b.w &&
@@ -206,6 +243,47 @@ export function CanvasEditor({ file, onSaved }: CanvasEditorProps) {
 
     if (isDrawing) {
       setDrawCurrent(coords);
+    } else if (isResizing && selectedBox) {
+      const updateBoxResize = (boxes: Box[], setBoxes: Dispatch<SetStateAction<Box[]>>) => {
+        const idx = boxes.findIndex(b => b.id === selectedBox);
+        if (idx !== -1) {
+          const newBoxes = [...boxes];
+          const box = newBoxes[idx];
+          let newX = box.x;
+          let newY = box.y;
+          let newW = box.w;
+          let newH = box.h;
+
+          if (isResizing === 'nw') {
+            newW = box.w + (box.x - coords.x);
+            newH = box.h + (box.y - coords.y);
+            newX = coords.x;
+            newY = coords.y;
+          } else if (isResizing === 'ne') {
+            newW = coords.x - box.x;
+            newH = box.h + (box.y - coords.y);
+            newY = coords.y;
+          } else if (isResizing === 'sw') {
+            newW = box.w + (box.x - coords.x);
+            newH = coords.y - box.y;
+            newX = coords.x;
+          } else if (isResizing === 'se') {
+            newW = coords.x - box.x;
+            newH = coords.y - box.y;
+          }
+
+          // prevent negative or too small width/height
+          if (newW > 5 && newH > 5) {
+            newBoxes[idx] = { ...box, x: newX, y: newY, w: newW, h: newH };
+            setBoxes(newBoxes);
+          }
+          return true;
+        }
+        return false;
+      };
+      if (!updateBoxResize(hands, setHands)) {
+        updateBoxResize(targets, setTargets);
+      }
     } else if (isDragging && selectedBox) {
       const updateBox = (boxes: Box[], setBoxes: Dispatch<SetStateAction<Box[]>>) => {
         const idx = boxes.findIndex(b => b.id === selectedBox);
@@ -241,6 +319,7 @@ export function CanvasEditor({ file, onSaved }: CanvasEditorProps) {
       setMode("select");
     }
     setIsDragging(false);
+    setIsResizing(null);
   };
 
   const deleteSelected = () => {
@@ -346,8 +425,34 @@ export function CanvasEditor({ file, onSaved }: CanvasEditorProps) {
         <div className="h-px bg-border my-2" />
         
         {selectedBox && (
-          <div className="bg-destructive/10 p-3 rounded-lg border border-destructive/20 text-center">
-             <p className="text-xs text-destructive font-medium mb-3">1 Box Selected</p>
+          <div className="bg-destructive/10 p-3 rounded-lg border border-destructive/20 text-center flex flex-col gap-3">
+             <p className="text-xs text-destructive font-medium">1 Box Selected</p>
+             
+             {/* Box Type Selection */}
+             {(() => {
+               const box = [...hands, ...targets].find(b => b.id === selectedBox);
+               if (box && box.type === 'hand') {
+                 return (
+                   <div className="text-left">
+                     <label className="text-xs font-semibold text-foreground mb-1 block">Pointing Type</label>
+                     <select
+                       value={box.pointing_type || ""}
+                       onChange={(e) => {
+                         const val = e.target.value;
+                         setHands(hands.map(h => h.id === selectedBox ? { ...h, pointing_type: val } : h));
+                       }}
+                       className="w-full text-xs p-1.5 rounded bg-background border border-border text-foreground"
+                     >
+                       <option value="">None</option>
+                       <option value="pointing from distance">pointing from distance</option>
+                       <option value="pointing at empty space">pointing at empty space</option>
+                     </select>
+                   </div>
+                 );
+               }
+               return null;
+             })()}
+
              <button 
                 onClick={deleteSelected}
                 className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90 text-sm py-1.5 rounded transition-colors font-medium flex items-center justify-center gap-2"

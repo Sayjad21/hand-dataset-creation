@@ -7,6 +7,7 @@ export interface Box {
   type: 'hand' | 'target';
   label?: string;
   conf?: number;
+  pointing_type?: string;
 }
 
 export interface Fingertip {
