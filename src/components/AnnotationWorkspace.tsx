@@ -51,11 +51,23 @@ export function AnnotationWorkspace() {
 
   if (uncroppedFiles.length > 0) {
     return (
-      <ImageCropper 
-        file={uncroppedFiles[0]} 
-        onCropComplete={handleCropComplete} 
-        onCancel={handleCropCancel} 
-      />
+      <div className="flex-1 flex flex-col h-full bg-black overflow-hidden">
+        <div className="flex items-center justify-between p-3 bg-secondary/50 border-b shrink-0">
+          <div className="text-sm font-medium text-foreground">
+            Crop Image <span className="text-primary">{currentIndex + 1}</span>
+          </div>
+          <div className="text-xs text-muted-foreground hidden sm:block">
+            Adjust the square to fit your target area
+          </div>
+        </div>
+        <div className="flex-1 relative min-h-0 w-full">
+          <ImageCropper 
+            file={uncroppedFiles[0]} 
+            onCropComplete={handleCropComplete} 
+            onCancel={handleCropCancel} 
+          />
+        </div>
+      </div>
     );
   }
 
