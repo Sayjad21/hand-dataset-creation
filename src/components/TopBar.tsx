@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { LogOut, Image as ImageIcon, PenTool } from "lucide-react";
+import { LogOut, Image as ImageIcon, PenTool, Moon, Sun } from "lucide-react";
 import { useAppContext } from "./Providers";
 
 export function TopBar() {
-  const { userId, setUserId, annotationCount } = useAppContext();
+  const { userId, setUserId, annotationCount, theme, toggleTheme } = useAppContext();
 
   if (!userId) return null;
 
@@ -43,6 +43,14 @@ export function TopBar() {
             <span className="md:hidden text-[10px] uppercase mr-1">Tot:</span>
             <span className="font-bold text-primary">{annotationCount}</span>
           </div>
+          
+          <button
+            onClick={toggleTheme}
+            className="flex items-center justify-center w-8 h-8 md:w-9 md:h-9 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-full transition-colors"
+            title="Toggle Theme"
+          >
+            {theme === 'dark' ? <Sun className="w-4 h-4 md:w-5 md:h-5" /> : <Moon className="w-4 h-4 md:w-5 md:h-5" />}
+          </button>
           
           <button
             onClick={() => setUserId(null)}

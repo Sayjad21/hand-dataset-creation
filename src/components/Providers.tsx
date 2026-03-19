@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useState, useEffect, ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
 
 interface AppContextType {
@@ -8,10 +8,13 @@ interface AppContextType {
   setUserId: (id: string | null) => void;
   annotationCount: number;
   refreshCount: () => Promise<void>;
+  theme: 'light' | 'dark';
+  toggleTheme: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 const USER_STORAGE_KEY = "dataset_annotator_user_id";
+const THEME_STORAGE_KEY = "dataset_annotator_theme";
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [userId, setUserIdState] = useState<string | null>(() => {
@@ -19,6 +22,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return localStorage.getItem(USER_STORAGE_KEY);
   });
   const [annotationCount, setAnnotationCount] = useState<number>(0);
+  
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) as 'light' | 'dark' | null;
+    if (savedTheme === 'light') {
+      setTheme('light');
+      document.documentElement.classList.remove('dark');
+    } else {
+      document.documentElement.classList.add('dark');
+    }
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => {
+      const newTheme = prev === 'dark' ? 'light' : 'dark';
+      localStorage.setItem(THEME_STORAGE_KEY, newTheme);
+      if (newTheme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+      return newTheme;
+    });
+  }, []);
 
   const refreshCountForUser = useCallback(async (id: string | null) => {
     if (!id) {
@@ -61,7 +89,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [refreshCountForUser, userId]);
 
   return (
-    <AppContext.Provider value={{ userId, setUserId, annotationCount, refreshCount }}>
+    <AppContext.Provider value={{ userId, setUserId, annotationCount, refreshCount, theme, toggleTheme }}>
       {children}
     </AppContext.Provider>
   );

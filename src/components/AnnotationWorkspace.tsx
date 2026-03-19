@@ -3,14 +3,16 @@
 import { useState } from "react";
 import { Upload, Camera, Trash2 } from "lucide-react";
 import { CanvasEditor } from "./CanvasEditor";
+import { ImageCropper } from "./ImageCropper";
 
 export function AnnotationWorkspace() {
   const [files, setFiles] = useState<File[]>([]);
+  const [uncroppedFiles, setUncroppedFiles] = useState<File[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      setFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
+      setUncroppedFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
     }
     // reset input
     e.target.value = '';
@@ -37,6 +39,26 @@ export function AnnotationWorkspace() {
     }
   };
 
+  const handleCropComplete = (croppedFile: File) => {
+    setFiles((prev) => [...prev, croppedFile]);
+    setUncroppedFiles((prev) => prev.slice(1));
+  };
+
+  const handleCropCancel = () => {
+    // If they cancel cropping, we just skip this file
+    setUncroppedFiles((prev) => prev.slice(1));
+  };
+
+  if (uncroppedFiles.length > 0) {
+    return (
+      <ImageCropper 
+        file={uncroppedFiles[0]} 
+        onCropComplete={handleCropComplete} 
+        onCancel={handleCropCancel} 
+      />
+    );
+  }
+
   if (files.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-8 text-center bg-card">
@@ -44,7 +66,7 @@ export function AnnotationWorkspace() {
           <div>
             <h2 className="text-2xl font-bold tracking-tight">Add Images to Annotate</h2>
             <p className="text-muted-foreground mt-2">
-              Upload multiple images from your device or take a photo directly.
+              Upload multiple images from your device or take a photo directly. You will be prompted to crop them to 1:1 ratio.
             </p>
           </div>
 
@@ -83,7 +105,7 @@ export function AnnotationWorkspace() {
   return (
     <div className="flex-1 flex flex-col h-full bg-black overflow-hidden">
       <div className="flex items-center justify-between p-3 bg-secondary/50 border-b shrink-0">
-        <div className="text-sm font-medium">
+        <div className="text-sm font-medium text-foreground">
           Image <span className="text-primary">{currentIndex + 1}</span> of {files.length}
         </div>
         <div className="flex gap-2">
